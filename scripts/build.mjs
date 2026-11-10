@@ -34,13 +34,19 @@ export function renderWorkspace(workspace) {
 <aside class="outcome"><span class="outcome-icon" aria-hidden="true">✦</span><div><p class="eyebrow">這次留下的成果</p><p>${e(workspace.outcome)}</p></div></aside>
 <footer class="standalone-footer"><a href="https://github.com/${workspace.repository}">參與編修</a><span id="release"></span></footer></main></body></html>`;
 }
+let cachedSha;
+
 export async function build(root = process.cwd(), sourceSha) {
   const workspace = validateWorkspace(JSON.parse(await readFile(resolve(root, 'workspace.json'), 'utf8')));
-  const sha = sourceSha ?? execFileSync('git', ['rev-parse', 'HEAD'], {cwd: root, encoding: 'utf8'}).trim();
+  let sha = sourceSha;
+  if (!sha) {
+    if (!cachedSha) cachedSha = execFileSync('git', ['rev-parse', 'HEAD'], {cwd: root, encoding: 'utf8'}).trim();
+    sha = cachedSha;
+  }
   if (!/^[a-f0-9]{40}$/.test(sha)) throw new Error('Expected an exact source SHA');
   const output = resolve(root, 'dist');
   await mkdir(output, {recursive: true});
-  const serialized = JSON.stringify(workspace).replaceAll('<', '\\u003c').replaceAll('\u2028', '\\u2028').replaceAll('\u2029', '\\u2029');
+  const serialized = JSON.stringify(workspace).replace(/[<\u2028\u2029]/g, char => ({'<': '\\u003c', '\u2028': '\\u2028', '\u2029': '\\u2029'}[char]));
   await writeFile(resolve(output, 'index.html'), renderWorkspace(workspace));
   await writeFile(resolve(output, 'site.js'), `const workspace = ${serialized};\nconst sourceSha = ${JSON.stringify(sha)};\n` + await readFile(resolve(root, 'src/site.js'), 'utf8'));
   await copyFile(resolve(root, 'src/style.css'), resolve(output, 'style.css'));
